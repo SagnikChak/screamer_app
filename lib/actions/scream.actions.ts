@@ -7,7 +7,6 @@ import { connectToDB } from "../mongoose";
 import User from "../models/user.model";
 import Scream from "../models/scream.model";
 import Community from "../models/community.model";
-// import Community from "../models/community.model";
 
 export async function fetchPosts(pageNumber = 1, pageSize = 20) {
   connectToDB();
@@ -73,7 +72,7 @@ export async function createScream({
     const createdScream = await Scream.create({
       text,
       author,
-      community: null, //communityIdObject, // Assign communityId if provided, or leave it null for personal account
+      community: communityIdObject, // Assign communityId if provided, or leave it null for personal account
     });
 
     // Update User model
@@ -81,12 +80,12 @@ export async function createScream({
       $push: { screams: createdScream._id },
     });
 
-    // if (communityIdObject) {
-    //   // Update Community model
-    //   await Community.findByIdAndUpdate(communityIdObject, {
-    //     $push: { screams: createdScream._id },
-    //   });
-    // }
+    if (communityIdObject) {
+      // Update Community model
+      await Community.findByIdAndUpdate(communityIdObject, {
+        $push: { screams: createdScream._id },
+      });
+    }
 
     revalidatePath(path);
   } catch (error: any) {
@@ -94,73 +93,73 @@ export async function createScream({
   }
 }
 
-// async function fetchAllChildScreams(screamId: string): Promise<any[]> {
-//   const childScreams = await Scream.find({ parentId: screamId });
+async function fetchAllChildScreams(screamId: string): Promise<any[]> {
+  const childScreams = await Scream.find({ parentId: screamId });
 
-//   const descendantScreams = [];
-//   for (const childScream of childScreams) {
-//     const descendants = await fetchAllChildScreams(childThread._id);
-//     descendantScreams.push(childScream, ...descendants);
-//   }
+  const descendantScreams = [];
+  for (const childScream of childScreams) {
+    const descendants = await fetchAllChildScreams(childScream._id);
+    descendantScreams.push(childScream, ...descendants);
+  }
 
-//   return descendantScreams;
-// }
+  return descendantScreams;
+}
 
-// export async function deleteScream(id: string, path: string): Promise<void> {
-//   try {
-//     connectToDB();
+export async function deleteScream(id: string, path: string): Promise<void> {
+  try {
+    connectToDB();
 
-//     // Find the scream to be deleted (the main scream)
-//     const mainScream = await Scream.findById(id).populate("author community");
+    // Find the scream to be deleted (the main scream)
+    const mainScream = await Scream.findById(id).populate("author community");
 
-//     if (!mainScream) {
-//       throw new Error("Scream not found");
-//     }
+    if (!mainScream) {
+      throw new Error("Scream not found");
+    }
 
-//     // Fetch all child screams and their descendants recursively
-//     const descendantScreams = await fetchAllChildScreams(id);
+    // Fetch all child screams and their descendants recursively
+    const descendantScreams = await fetchAllChildScreams(id);
 
-//     // Get all descendant scream IDs including the main scream ID and child scream IDs
-//     const descendantScreamIds = [
-//       id,
-//       ...descendantScreams.map((scream) => scream._id),
-//     ];
+    // Get all descendant scream IDs including the main scream ID and child scream IDs
+    const descendantScreamIds = [
+      id,
+      ...descendantScreams.map((scream) => scream._id),
+    ];
 
-//     // Extract the authorIds and communityIds to update User and Community models respectively
-//     const uniqueAuthorIds = new Set(
-//       [
-//         ...descendantScreams.map((scream) => scream.author?._id?.toString()), // Use optional chaining to handle possible undefined values
-//         mainScream.author?._id?.toString(),
-//       ].filter((id) => id !== undefined)
-//     );
+    // Extract the authorIds and communityIds to update User and Community models respectively
+    const uniqueAuthorIds = new Set(
+      [
+        ...descendantScreams.map((scream) => scream.author?._id?.toString()), // Use optional chaining to handle possible undefined values
+        mainScream.author?._id?.toString(),
+      ].filter((id) => id !== undefined)
+    );
 
-//     const uniqueCommunityIds = new Set(
-//       [
-//         ...descendantScreams.map((scream) => scream.community?._id?.toString()), // Use optional chaining to handle possible undefined values
-//         mainScream.community?._id?.toString(),
-//       ].filter((id) => id !== undefined)
-//     );
+    const uniqueCommunityIds = new Set(
+      [
+        ...descendantScreams.map((scream) => scream.community?._id?.toString()), // Use optional chaining to handle possible undefined values
+        mainScream.community?._id?.toString(),
+      ].filter((id) => id !== undefined)
+    );
 
-//     // Recursively delete child threads and their descendants
-//     await Scream.deleteMany({ _id: { $in: descendantScreamIds } });
+    // Recursively delete child screams and their descendants
+    await Scream.deleteMany({ _id: { $in: descendantScreamIds } });
 
-//     // Update User model
-//     await User.updateMany(
-//       { _id: { $in: Array.from(uniqueAuthorIds) } },
-//       { $pull: { screams: { $in: descendantScreamIds } } }
-//     );
+    // Update User model
+    await User.updateMany(
+      { _id: { $in: Array.from(uniqueAuthorIds) } },
+      { $pull: { screams: { $in: descendantScreamIds } } }
+    );
 
-//     // Update Community model
-//     await Community.updateMany(
-//       { _id: { $in: Array.from(uniqueCommunityIds) } },
-//       { $pull: { screams: { $in: descendantScreamIds } } }
-//     );
+    // Update Community model
+    await Community.updateMany(
+      { _id: { $in: Array.from(uniqueCommunityIds) } },
+      { $pull: { screams: { $in: descendantScreamIds } } }
+    );
 
-//     revalidatePath(path);
-//   } catch (error: any) {
-//     throw new Error(`Failed to delete scream: ${error.message}`);
-//   }
-// }
+    revalidatePath(path);
+  } catch (error: any) {
+    throw new Error(`Failed to delete scream: ${error.message}`);
+  }
+}
 
 export async function fetchScreamById(screamId: string) {
   connectToDB();
@@ -234,7 +233,7 @@ export async function addCommentToScream(
     // Add the comment scream's ID to the original scream's children array
     originalScream.children.push(savedCommentScream._id);
 
-    // Save the updated original thread to the database
+    // Save the updated original scream to the database
     await originalScream.save();
 
     revalidatePath(path);
